@@ -49,6 +49,8 @@ static void options_init(sshg_opts *opt) {
     opt->blacklist_filename = NULL;
     opt->subnet_ipv6 = 128;
     opt->subnet_ipv4 = 32;
+    opt->match_subnet_ipv6 = 128;
+    opt->match_subnet_ipv4 = 32;
     opt->block_time_multiplier = 2;
 }
 
@@ -57,7 +59,7 @@ int get_options_cmdline(int argc, char *argv[]) {
 
     options_init(&opts);
 
-    while ((optch = getopt(argc, argv, "b:p:s:a:w:i:N:n:m:")) != -1) {
+    while ((optch = getopt(argc, argv, "b:p:s:a:w:i:N:n:m:I:J:")) != -1) {
         switch (optch) {
             case 'b':
                 opts.blacklist_filename = (char *)malloc(strlen(optarg) + 1);
@@ -125,6 +127,24 @@ int get_options_cmdline(int argc, char *argv[]) {
                 }
                 break;
 
+            case 'I':   /* IPv4 match subnet size */
+                opts.match_subnet_ipv4 = strtol(optarg, (char **)NULL, 10);
+                if (opts.match_subnet_ipv4 < 1 || opts.match_subnet_ipv4 > 32) {
+                    fprintf(stderr, "IPv4 match subnet size must be between 1 and 32. Terminating.\n");
+                    usage();
+                    return -1;
+                }
+                break;
+
+            case 'J':   /* IPv6 match subnet size */
+                opts.match_subnet_ipv6 = strtol(optarg, (char **)NULL, 10);
+                if (opts.match_subnet_ipv6 < 1 || opts.match_subnet_ipv6 > 128) {
+                    fprintf(stderr, "IPv6 match subnet size must be between 1 and 128. Terminating.\n");
+                    usage();
+                    return -1;
+                }
+                break;
+
             default:    /* or anything else: print help */
                 usage();
                 return -1;
@@ -136,6 +156,15 @@ int get_options_cmdline(int argc, char *argv[]) {
         fprintf(stderr, "error: blacklist (%u) is less than abuse threshold (%u)\n",
                 opts.blacklist_threshold, opts.abuse_threshold);
         return -1;
+    }
+
+    /* If match subnet is smaller than block subnet, override block subnet to match subnet */
+    if (opts.subnet_ipv4 > opts.match_subnet_ipv4) {
+        opts.subnet_ipv4 = opts.match_subnet_ipv4;
+    }
+
+    if (opts.subnet_ipv6 > opts.match_subnet_ipv6) {
+        opts.subnet_ipv6 = opts.match_subnet_ipv6;
     }
 
     return 0;

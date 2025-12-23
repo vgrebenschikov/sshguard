@@ -29,6 +29,8 @@ typedef struct {
     char *blacklist_filename;           /* NULL to disable blacklist, or path of the blacklist file */
     unsigned int subnet_ipv6;           /* size of subnets to block, CIDR notation */
     unsigned int subnet_ipv4;           /* size of subnets to block, CIDR notation */
+    unsigned int match_subnet_ipv6;     /* size of subnets to match/aggregate, CIDR notation */
+    unsigned int match_subnet_ipv4;     /* size of subnets to match/aggregate, CIDR notation */
     float block_time_multiplier;        /* determines how much the block time increases */
 } sshg_opts;
 

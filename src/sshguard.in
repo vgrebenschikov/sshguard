@@ -74,6 +74,8 @@ setflag 'p' "$BLOCK_TIME"
 setflag 's' "$DETECTION_TIME"
 setflag 'N' "$IPV6_SUBNET"
 setflag 'n' "$IPV4_SUBNET"
+setflag 'J' "$MATCH_IPV6_SUBNET"
+setflag 'I' "$MATCH_IPV4_SUBNET"
 setflag 'm' "$BLOCK_TIME_MULTIPLIER"
 if [ -n "$WHITELIST_ARG" ]; then
     for arg in $WHITELIST_ARG; do

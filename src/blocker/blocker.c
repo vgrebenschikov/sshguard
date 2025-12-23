@@ -29,6 +29,8 @@
 #include <time.h>
 #include <unistd.h>
 
+#include "address.h"
+#include "attack.h"
 #include "blocklist.h"
 #include "sandbox.h"
 #include "simclist.h"
@@ -67,7 +69,7 @@ static void sigfin_handler(int);
 static void finishup(void);
 
 /* handle an attack: addr is the author, addrkind its address kind, service the attacked service code */
-static void report_address(attack_t attack);
+static void report_address(attack_t attack, const char *original_address);
 /* cleanup false-alarm attackers from limbo list (ones with too few attacks in too much time) */
 static void purge_limbo_stale(void);
 
@@ -136,11 +138,22 @@ int main(int argc, char *argv[]) {
 
     char buf[1024];
     attack_t parsed_attack;
+    char original_address[ADDRLEN];
     while (!exit_sig && fgets(buf, sizeof(buf), stdin) != NULL) {
         if (sscanf(buf, "%d %46s %d %d\n", (int*)&parsed_attack.service,
                   parsed_attack.address.value, &parsed_attack.address.kind,
                   &parsed_attack.dangerousness) == 4) {
-            report_address(parsed_attack);
+            /* Save original address before normalization */
+            strncpy(original_address, parsed_attack.address.value, sizeof(original_address));
+            original_address[sizeof(original_address) - 1] = '\0';
+
+            /* Normalize address by subnet for aggregation */
+            if (normalize_address_by_subnet(&parsed_attack.address) != 0) {
+                sshguard_log(LOG_WARNING, "Could not normalize address %s, using as-is",
+                            parsed_attack.address.value);
+            }
+
+            report_address(parsed_attack, original_address);
         } else {
             sshguard_log(LOG_ERR, "Could not parse attack data.");
             break;
@@ -183,8 +196,11 @@ void log_block(attacker_t *tmpent, attacker_t *offenderent) {
  *      --OR-- create them if first sight.
  * 2) block the attacker, if attacks > threshold (abuse)
  * 3) blacklist the address, if the number of abuses is excessive
+ *
+ * @param attack The attack structure with normalized address
+ * @param original_address The original IP address before normalization (can be NULL if same)
  */
-static void report_address(attack_t attack) {
+static void report_address(attack_t attack, const char *original_address) {
     attacker_t *tmpent = NULL;
     attacker_t *offenderent;
 
@@ -207,10 +223,22 @@ static void report_address(attack_t attack) {
         return;
     }
 
-    sshguard_log(LOG_NOTICE,
-                 "Attack from \"%s\" on service %s with danger %u.",
-                 attack.address.value, service_to_name(attack.service),
-                 attack.dangerousness);
+    unsigned int match_subnet = (attack.address.kind == ADDRKIND_IPv4) ?
+        opts.match_subnet_ipv4 : opts.match_subnet_ipv6;
+
+    if (original_address != NULL && strcmp(original_address, attack.address.value) != 0) {
+        /* Address was normalized - show both original and normalized */
+        sshguard_log(LOG_NOTICE,
+                     "Attack from \"%s\" (aggregated to subnet %s/%u) on service %s with danger %u.",
+                     original_address, attack.address.value, match_subnet,
+                     service_to_name(attack.service), attack.dangerousness);
+    } else {
+        /* Single address matching - no subnet aggregation, or address wasn't normalized */
+        sshguard_log(LOG_NOTICE,
+                     "Attack from \"%s\" on service %s with danger %u.",
+                     attack.address.value, service_to_name(attack.service),
+                     attack.dangerousness);
+    }
 
     /* search entry in list */
     tmpent = list_seek(& limbo, & attack.address);
